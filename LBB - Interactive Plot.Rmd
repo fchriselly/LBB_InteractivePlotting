@@ -1,0 +1,85 @@
+---
+title: "LBB - Interactive Plotting"
+author: "Fabiola Chriselly"
+date: "10/25/2020"
+output: html_document
+---
+
+```{r}
+#Read library yang akan digunakan
+library(readxl)
+library(shiny)
+library(shinydashboard)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(plotly)
+library(ggthemes)
+library(glue)
+```
+
+```{r}
+#Read dataset yang akan dianalisa
+CL <- read_xlsx("Data/CL TCY.xlsx")
+
+#Bersihkan dataset
+CL_clean <- CL %>% 
+    mutate_at(vars(CIS, `ACC NO`, NAMA, KAT, `JENIS FAS`, MU, SEKON, `KET SEKON`), as.factor)%>% 
+    mutate_at(vars(PLAFON, SALDO, KOL), as.numeric)%>% 
+    arrange(KOL)
+
+#Olah data sesuai yang diinginkan
+CL_agg <- aggregate(data = CL_clean, PLAFON~`SEKON`+KOL, sum)
+```
+
+```{r}
+#Buat shiny dashboard
+sidebar <- dashboardSidebar(
+                sidebarMenu(
+                    menuItem("Credit Portfolio", tabName = "portfolio", icon = icon("th")),
+                    selectInput(inputId = "major",
+                                label = "Kolektibilitas",
+                                choices = unique(CL_clean$KOL),
+                                selected = "1")
+            ))
+
+body <- dashboardBody(
+                tabItem(tabName = "portfolio",
+                    fluidRow(
+                        box(plotlyOutput("plot1",height = 500),width = 12)
+                        )
+                    )
+                )
+
+
+UI <- dashboardPage(
+            dashboardHeader(title = "Lending Dashboard"),
+            sidebar,
+            body)
+            
+
+server <- function(input, output) {
+     output$plot1 <- renderPlotly({
+         plot_CL <- CL_agg %>% 
+             filter(KOL == input$major) %>%
+             ggplot(aes(x=`SEKON`, 
+                        y = PLAFON, 
+                        fill = `SEKON`, 
+                        text=glue("Jumlah Plafon = {PLAFON}")))+
+             geom_col()+
+             coord_flip()+
+             ggtitle("Penyaluran Kredit Per Bidang Usaha Cabang ABC")+
+             labs(subtitle = "Periode Agustus 2020",
+                  x = NULL,
+                  y = NULL) +
+             scale_y_continuous(labels=scales::comma)+
+             theme_minimal() + theme(legend.position = "none")
+             
+         
+         ggplotly(plot_CL, tooltip = "text")
+    })
+}
+
+shinyApp(UI, server)
+```
+
